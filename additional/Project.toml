@@ -1,0 +1,10 @@
+name = "tsvdm"
+uuid = "21ab7ad8-2c4f-4a39-b1cf-a4f5a3a9c001"
+version = "0.1.0"
+
+# Stdlib only — no external deps. LinearAlgebra, Random, and Printf are all
+# bundled with Julia itself, so this Project.toml exists purely to pin the
+# Julia minor version for reproducibility (plan.md §4 Part 5).
+
+[compat]
+julia = "1.9"

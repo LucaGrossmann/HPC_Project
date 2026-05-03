@@ -1,0 +1,4 @@
+tsvdm_serial
+results/*
+!results/.gitkeep
+fixtures/medium.bin
