@@ -8,14 +8,10 @@
 #SBATCH --time=00:05:00
 #SBATCH --output=results/%x-%j.out
 
-# Activate the course Spack env (plan.md §"Cluster Setup" in the top-level CLAUDE.md).
 . ~/161588/spack/share/spack/setup-env.sh
 spack env activate -p CS-2050
 
-# Keep BLAS single-threaded — the serial baseline must stay single-threaded.
 export OPENBLAS_NUM_THREADS=1
 
-cd "$(dirname "$0")"
-mkdir -p results
-
-./tsvdm_serial "${1:-fixtures/small.bin}"
+srun ./tsvdm_serial "${1:-fixtures/small.bin}"
+exit $?

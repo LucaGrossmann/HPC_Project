@@ -69,6 +69,14 @@ static Fixture loadFixture(const std::string& path) {
         std::exit(1);
     }
 
+    char magic[4];
+    std::fread(magic, sizeof(char), 4, f);
+    if (std::memcmp(magic, MAGIC, 4) != 0) {
+        std::fprintf(stderr, "error: bad magic in %s (expected TSVD)\n",
+                     path.c_str());
+        std::exit(1);
+    }
+
     int32_t m = 0, p = 0, n = 0;
     std::fread(&m, sizeof(int32_t), 1, f);
     std::fread(&p, sizeof(int32_t), 1, f);

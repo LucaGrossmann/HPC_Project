@@ -7,7 +7,7 @@ CXXFLAGS := -std=c++17 -O2 -Wall -Wextra
 SPACK_OPENBLAS := $(shell spack location -i openblas)
 CXXFLAGS       += -fopenmp -I$(SPACK_OPENBLAS)/include
 LDFLAGS        := -fopenmp -L$(SPACK_OPENBLAS)/lib -Wl,-rpath,$(SPACK_OPENBLAS)/lib \
-                  -lopenblas -llapack -lm
+                  -lopenblas -lm
 
 GEN_FIXTURE := ../cuda/gen_fixture.py
 
