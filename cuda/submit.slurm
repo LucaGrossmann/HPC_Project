@@ -22,8 +22,23 @@ set -euo pipefail
 . ~/161588/spack/share/spack/setup-env.sh
 spack env activate -p CS-2050-gpu
 
-cd "$(dirname "$0")"
-mkdir -p results
+# CuPy is not provisioned in CS-2050-gpu (the course teaches Numba CUDA as
+# its primary Python-on-GPU tool). t-SVDM needs batched SVD, which Numba
+# doesn't expose, so we use CuPy — installed user-locally on first run.
+# Idempotent: no-op if already installed.
+#
+# Note: the Spack env's Python is a venv with system-site-packages
+# disabled, so pip install --user lands in ~/.local but the env's
+# Python won't see it. Prepend the user-site dir to PYTHONPATH so the
+# import resolves.
+PYVER=$(python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+export PYTHONPATH="$HOME/.local/lib/python${PYVER}/site-packages:${PYTHONPATH:-}"
+
+# Use `python -m pip` (not bare `pip`) so the install targets the active
+# env's Python. Bare `pip` on this cluster sometimes resolves to a Python
+# 3.9 pip, which drops packages into ~/.local/lib/python3.9/... where the
+# env's Python 3.12 will never find them.
+python -c "import cupy" 2>/dev/null || python -m pip install --user --quiet cupy-cuda12x
 
 # One-time recon: print versions so we can tell what we ran on.
 nvidia-smi -L || true
@@ -31,12 +46,12 @@ python -c "import cupy; print('cupy', cupy.__version__, 'cuda_runtime', cupy.cud
 echo
 
 # Strong-scaling sweep across problem sizes (plan.md §4 Part 4).
-echo "=== size sweep (3 sizes × 3 reps) ==="
+echo "=== size sweep ==="
 for size in "64 64 64" "256 256 256" "512 512 256"; do
-    python run_cupy.py --gen $size --reps 3
+    python run_cupy.py --gen $size
 done
 echo
 
-# Cross-check against the committed serial fixture (sanity, 1-rep).
+# Cross-check against the committed serial fixture.
 echo "=== cross-check vs. serial fixture ==="
-python run_cupy.py ../serial/fixtures/medium.bin --reps 1
+python run_cupy.py ../serial/fixtures/medium.bin
