@@ -35,9 +35,12 @@ PYVER=$(python -c "import sys; print(f'{sys.version_info.major}.{sys.version_inf
 export PYTHONPATH="$HOME/.local/lib/python${PYVER}/site-packages:${PYTHONPATH:-}"
 
 # Use `python -m pip` (not bare `pip`) so the install targets the active
-# env's Python. Bare `pip` on this cluster sometimes resolves to a Python
-# 3.9 pip, which drops packages into ~/.local/lib/python3.9/... where the
-# env's Python 3.12 will never find them.
+# env's Python. Bare `pip` on this cluster resolves to a different Python
+# (3.9), which drops packages into ~/.local/lib/python3.9/... where the
+# env's Python 3.12 will never find them. Two complications:
+#   1. The env's Python 3.12 ships without pip — bootstrap it via ensurepip.
+#   2. Both steps are idempotent: if pip / cupy already exist, they no-op.
+python -m pip --version >/dev/null 2>&1 || python -m ensurepip --user --quiet
 python -c "import cupy" 2>/dev/null || python -m pip install --user --quiet cupy-cuda12x
 
 # One-time recon: print versions so we can tell what we ran on.
