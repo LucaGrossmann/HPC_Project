@@ -200,6 +200,7 @@ static void sliceSvdAll(double* Ahat,
 /** @brief Build a dense f-diagonal tensor Shat (r, r, n) from packed sHat (r, n). */
 static void assembleSDense(const double* sHat, double* Shat, int n, int r) {
     std::fill(Shat, Shat + static_cast<size_t>(r) * r * n, 0.0);
+    #pragma omp parallel for schedule(static)
     for (int k = 0; k < n; ++k) {
         for (int i = 0; i < r; ++i) {
             Shat[static_cast<size_t>(i) + static_cast<size_t>(i) * r
@@ -227,6 +228,7 @@ static void tsvdm(const double* A, const double* M,
 
     // V wants shape (p, r, n), not (r, p, n). Transpose each slice.
     std::vector<double> Vhat(static_cast<size_t>(p) * r * n);
+    #pragma omp parallel for schedule(static)
     for (int k = 0; k < n; ++k) {
         const double* src = VtHat.data() + static_cast<size_t>(k) * r * p;
         double* dst       = Vhat.data()  + static_cast<size_t>(k) * p * r;
@@ -261,9 +263,11 @@ static void reconstructApprox(const double* U, const double* S, const double* V,
     const double one  = 1.0;
     const double zero = 0.0;
 
+    #pragma omp parallel
     {
         std::vector<double> tmp(static_cast<size_t>(m) * r);  // per-thread scratch
 
+        #pragma omp for schedule(static)
         for (int k = 0; k < n; ++k) {
             const double* uPtr = Uhat.data() + static_cast<size_t>(k) * m * r;
             const double* sPtr = Shat.data() + static_cast<size_t>(k) * r * r;
@@ -296,119 +300,13 @@ static double relativeError(const double* A, const double* Aapprox, size_t n) {
     return std::sqrt(numer) / std::sqrt(denom);
 }
 
-
-// /** @brief Build a dense f-diagonal tensor Shat (r, r, n) from packed sHat (r, n). */
-// static void assembleSDense(const double* sHat, double* Shat, int n, int r) {
-//     std::fill(Shat, Shat + static_cast<size_t>(r) * r * n, 0.0);
-//     #pragma omp parallel for schedule(static)
-//     for (int k = 0; k < n; ++k) {
-//         for (int i = 0; i < r; ++i) {
-//             Shat[static_cast<size_t>(i) + static_cast<size_t>(i) * r
-//                  + static_cast<size_t>(k) * r * r] = sHat[i + k * r];
-//         }
-//     }
-// }
-
-// /** @brief t-SVDM (Algorithm 2). Writes U, S, V in the spatial domain. */
-// static void tsvdm(const double* A, const double* M,
-//                   int m, int p, int n,
-//                   double* U, double* S, double* V) {
-//     const int r = std::min(m, p);
-
-//     std::vector<double> Ahat(static_cast<size_t>(m) * p * n);
-//     modeThree(A, M, Ahat.data(), m, p, n, /*forward=*/true);
-
-//     std::vector<double> Uhat (static_cast<size_t>(m) * r * n);
-//     std::vector<double> sHat (static_cast<size_t>(r) * n);
-//     std::vector<double> VtHat(static_cast<size_t>(r) * p * n);
-//     sliceSvdAll(Ahat.data(), Uhat.data(), sHat.data(), VtHat.data(), m, p, n);
-
-//     std::vector<double> Shat(static_cast<size_t>(r) * r * n);
-//     assembleSDense(sHat.data(), Shat.data(), n, r);
-
-//     // V wants shape (p, r, n), not (r, p, n). Transpose each slice.
-//     std::vector<double> Vhat(static_cast<size_t>(p) * r * n);
-//     #pragma omp parallel for schedule(static)
-//     for (int k = 0; k < n; ++k) {
-//         const double* src = VtHat.data() + static_cast<size_t>(k) * r * p;
-//         double* dst       = Vhat.data()  + static_cast<size_t>(k) * p * r;
-//         for (int i = 0; i < r; ++i) {
-//             for (int j = 0; j < p; ++j) {
-//                 dst[j + i * p] = src[i + j * r];
-//             }
-//         }
-//     }
-
-//     // Inverse mode-3 (apply M^T) on each factor to land in spatial domain.
-//     modeThree(Uhat.data(), M, U, m, r, n, /*forward=*/false);
-//     modeThree(Shat.data(), M, S, r, r, n, /*forward=*/false);
-//     modeThree(Vhat.data(), M, V, p, r, n, /*forward=*/false);
-// }
-
-// /** @brief Reconstruct A_approx from (U, S, V, M). */
-// static void reconstructApprox(const double* U, const double* S, const double* V,
-//                               const double* M,
-//                               int m, int p, int n, int r,
-//                               double* Aapprox) {
-//     std::vector<double> Uhat (static_cast<size_t>(m) * r * n);
-//     std::vector<double> Shat (static_cast<size_t>(r) * r * n);
-//     std::vector<double> Vhat (static_cast<size_t>(p) * r * n);
-//     modeThree(U, M, Uhat.data(), m, r, n, /*forward=*/true);
-//     modeThree(S, M, Shat.data(), r, r, n, /*forward=*/true);
-//     modeThree(V, M, Vhat.data(), p, r, n, /*forward=*/true);
-
-//     std::vector<double> AhatApprox(static_cast<size_t>(m) * p * n);
-//     const char noTrans = 'N';
-//     const char trans   = 'T';
-//     const double one  = 1.0;
-//     const double zero = 0.0;
-
-//     #pragma omp parallel
-//     {
-//         std::vector<double> tmp(static_cast<size_t>(m) * r);  // per-thread scratch
-
-//         #pragma omp for schedule(static)
-//         for (int k = 0; k < n; ++k) {
-//             const double* uPtr = Uhat.data() + static_cast<size_t>(k) * m * r;
-//             const double* sPtr = Shat.data() + static_cast<size_t>(k) * r * r;
-//             const double* vPtr = Vhat.data() + static_cast<size_t>(k) * p * r;
-//             double*       aPtr = AhatApprox.data() + static_cast<size_t>(k) * m * p;
-
-//             // tmp = Uhat . Shat   (m x r) = (m x r) . (r x r)
-//             dgemm_(&noTrans, &noTrans, &m, &r, &r,
-//                    &one, uPtr, &m, sPtr, &r,
-//                    &zero, tmp.data(), &m);
-//             // Ahat_approx = tmp . Vhat^T   (m x p) = (m x r) . (r x p)
-//             dgemm_(&noTrans, &trans, &m, &p, &r,
-//                    &one, tmp.data(), &m, vPtr, &p,
-//                    &zero, aPtr, &m);
-//         }
-//     }
-
-//     modeThree(AhatApprox.data(), M, Aapprox, m, p, n, /*forward=*/false);
-// }
-
-// /** @brief Relative Frobenius error ||A - Aapprox||_F / ||A||_F. */
-// static double relativeError(const double* A, const double* Aapprox, size_t n) {
-//     double numer = 0.0;
-//     double denom = 0.0;
-//     for (size_t i = 0; i < n; ++i) {
-//         const double diff = A[i] - Aapprox[i];
-//         numer += diff * diff;
-//         denom += A[i] * A[i];
-//     }
-//     return std::sqrt(numer) / std::sqrt(denom);
-// }
-
 // -----------------------------------------------------------------------------
 int main(int argc, char** argv) {
+    const int reps = 3;
     const char* fixturePath = nullptr;
     const char* dumpPath    = nullptr;
-    int reps = 1;
     for (int i = 1; i < argc; ++i) {
-        if (std::strcmp(argv[i], "--reps") == 0 && i + 1 < argc) {
-            reps = std::atoi(argv[++i]);
-        } else if (std::strcmp(argv[i], "--dump") == 0 && i + 1 < argc) {
+        if (std::strcmp(argv[i], "--dump") == 0 && i + 1 < argc) {
             dumpPath = argv[++i];
         } else if (argv[i][0] != '-') {
             fixturePath = argv[i];
@@ -417,9 +315,8 @@ int main(int argc, char** argv) {
             return 2;
         }
     }
-    if (!fixturePath || reps < 1) {
-        std::fprintf(stderr,
-                     "usage: %s <fixture.bin> [--reps N] [--dump out.bin]\n",
+    if (!fixturePath) {
+        std::fprintf(stderr, "usage: %s <fixture.bin> [--dump out.bin]\n",
                      argv[0]);
         return 2;
     }

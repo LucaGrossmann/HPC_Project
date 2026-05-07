@@ -27,8 +27,7 @@ def relative_error(A: np.ndarray, A_approx: np.ndarray) -> float:
 def compression_ratio(A: np.ndarray, stored_values: int) -> float:
     """Ratio of stored floats in the approximation to A's total size.
 
-    ``stored_values`` is the total number of floats kept across U, S, V
-    (for t-SVDMII with ragged ranks, summed across slices).
+    ``stored_values`` is the total number of floats kept across U, S, V.
     """
     return float(stored_values) / float(A.size)
 

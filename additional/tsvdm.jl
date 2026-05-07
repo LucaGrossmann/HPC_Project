@@ -1,142 +1,102 @@
 #!/usr/bin/env julia
-# Part 5 — additional implementation in Julia.
+# Part 5 — t-SVDM in Julia (stdlib only).
 #
-# Single-file algorithm + driver. Uses only Julia stdlib (LinearAlgebra,
-# Random, Printf). Layout convention matches cuda/run_cupy.py:
-#   A : (n, m, p)         tensor, slices stacked along axis 1
+# Layout (matches cuda/run_cupy.py):
+#   A : (n, m, p)         tensor
 #   M : (n, n)            orthogonal matrix
-# Returned factors:
+# Factors returned by tsvdm:
 #   U : (n, m, r)
 #   S : (n, r, r)         f-diagonal
 #   V : (n, p, r)
 # where r = min(m, p).
 #
-# Run locally:
-#   julia tsvdm.jl ../serial/fixtures/small.bin
-#   julia tsvdm.jl --gen 256 256 256 --reps 3
-#
-# Run on cluster: submit.slurm (CS-2050 Spack env).
+# Run:
+#   julia tsvdm.jl <fixture.bin> [--reps N] [--dump out.bin]
+#   julia tsvdm.jl --gen M P N   [--reps N] [--dump out.bin]
 
 using LinearAlgebra
 using Random
 using Printf
 
-# --- Algorithm (the "Julia part") --------------------------------------------
+# Mode-3 product: (X ×₃ A)[i,j,k] = Σₗ X[i,l] · A[l,j,k].
+# Reshape A as (n, m*p), multiply by X, reshape back.
+function mode3(X, A)
+    n, m, p = size(A)
+    return reshape(X * reshape(A, n, m*p), n, m, p)
+end
 
-function tsvdm(A::Array{Float64,3}, M::Matrix{Float64})
+function tsvdm(A, M)
     n, m, p = size(A)
     r = min(m, p)
 
-    # Forward mode-3 transform: A_hat[i,j,k] = sum_l M[i,l] * A[l,j,k].
-    # Trick: reshape A as (n, m*p), multiply by M, reshape back.
-    Ahat = reshape(M * reshape(A, n, m*p), n, m, p)
+    Ahat = mode3(M, A)
 
-    # Per-slice thin SVD (stdlib has no batched variant).
-    Uhat  = Array{Float64,3}(undef, n, m, r)
-    shat  = Array{Float64,2}(undef, n, r)
-    Vthat = Array{Float64,3}(undef, n, r, p)
-    for i in 1:n
-        F = svd(Ahat[i, :, :])              # F.U (m,r), F.S (r,), F.Vt (r,p)
-        Uhat[i, :, :]  .= F.U
-        shat[i, :]     .= F.S
-        Vthat[i, :, :] .= F.Vt
+    Uhat = zeros(n, m, r)
+    Shat = zeros(n, r, r)
+    Vhat = zeros(n, p, r)
+    @views for i in 1:n                       # @views: slices stay as views, no copy
+        F = svd(Ahat[i, :, :])                # F.U (m,r), F.S (r,), F.V (p,r)
+        Uhat[i, :, :] = F.U
+        Shat[i, :, :] = Diagonal(F.S)         # off-diagonals stay zero
+        Vhat[i, :, :] = F.V
     end
 
-    # Pack singular values into a dense f-diagonal tensor Shat (n, r, r).
-    Shat = zeros(Float64, n, r, r)
-    for i in 1:n, j in 1:r
-        Shat[i, j, j] = shat[i, j]
-    end
-
-    Vhat = permutedims(Vthat, (1, 3, 2))    # (n, r, p) -> (n, p, r)
-
-    # Inverse mode-3 transform via M^T (M is orthogonal).
-    Mt = transpose(M)
-    invmode3(B) = (let s = size(B); reshape(Mt * reshape(B, s[1], s[2]*s[3]), s) end)
-    return invmode3(Uhat), invmode3(Shat), invmode3(Vhat)
+    return mode3(M', Uhat), mode3(M', Shat), mode3(M', Vhat)
 end
 
-function reconstruct(U::Array{Float64,3}, S::Array{Float64,3}, V::Array{Float64,3},
-                     M::Matrix{Float64})
-    fwd(B) = (let s = size(B); reshape(M * reshape(B, s[1], s[2]*s[3]), s) end)
-    Uhat, Shat, Vhat = fwd(U), fwd(S), fwd(V)
+function reconstruct(U, S, V, M)
+    Uhat = mode3(M, U)
+    Shat = mode3(M, S)
+    Vhat = mode3(M, V)
     n, m, _ = size(Uhat)
     p = size(Vhat, 2)
-    Ahat = Array{Float64,3}(undef, n, m, p)
-    for i in 1:n
-        Ahat[i, :, :] .= Uhat[i, :, :] * Shat[i, :, :] * transpose(Vhat[i, :, :])
+    Ahat = zeros(n, m, p)
+    @views for i in 1:n
+        Ahat[i, :, :] = Uhat[i, :, :] * Shat[i, :, :] * Vhat[i, :, :]'
     end
-    Mt = transpose(M)
-    return reshape(Mt * reshape(Ahat, n, m*p), n, m, p)
+    return mode3(M', Ahat)
 end
 
-# --- Loading / generation ----------------------------------------------------
-
-function load_fixture(path::AbstractString)
+function load_fixture(path)
     open(path, "r") do f
-        magic = read(f, 4)
-        @assert String(magic) == "TSVD" "bad fixture magic"
+        @assert String(read(f, 4)) == "TSVD" "bad fixture magic"
         m = Int(read(f, Int32))
         p = Int(read(f, Int32))
         n = Int(read(f, Int32))
-        # Disk: column-major (m, p, n). Read directly into a Julia (m, p, n) array.
+        # Disk format: column-major (m, p, n). Permute into our (n, m, p) layout.
         A_disk = Array{Float64,3}(undef, m, p, n)
         read!(f, A_disk)
-        # Convert to (n, m, p) layout (matches Python tsvdm_core.py convention).
         A = permutedims(A_disk, (3, 1, 2))
-        M = Array{Float64,2}(undef, n, n)
+        M = Matrix{Float64}(undef, n, n)
         read!(f, M)
         return A, M, (m, p, n)
     end
 end
 
-function generate(m::Int, p::Int, n::Int; seed::Int=0)
+function generate(m, p, n; seed=0)
     Random.seed!(seed)
     A = randn(n, m, p)
-    G = randn(n, n)
-    F = qr(G)
-    return A, Matrix(F.Q), (m, p, n)
+    Q = Matrix(qr(randn(n, n)).Q)             # materialize Q out of the QR-packed form
+    return A, Q, (m, p, n)
 end
 
-# --- Driver ------------------------------------------------------------------
+function main(args)
+    reps_idx = findfirst(==("--reps"), args)
+    reps = reps_idx === nothing ? 1 : parse(Int, args[reps_idx + 1])
 
-function parse_args(args::Vector{String})
-    fixture = nothing
-    gen = nothing
-    reps = 1
-    dump = nothing
-    i = 1
-    while i <= length(args)
-        a = args[i]
-        if a == "--gen"
-            gen = (parse(Int, args[i+1]), parse(Int, args[i+2]), parse(Int, args[i+3]))
-            i += 4
-        elseif a == "--reps"
-            reps = parse(Int, args[i+1]); i += 2
-        elseif a == "--dump"
-            dump = args[i+1]; i += 2
-        elseif !startswith(a, "-")
-            fixture = a; i += 1
+    dump_idx = findfirst(==("--dump"), args)
+    dump = dump_idx === nothing ? nothing : args[dump_idx + 1]
+
+    A, M, (m, p, n) =
+        if !isempty(args) && args[1] == "--gen"
+            generate(parse(Int, args[2]), parse(Int, args[3]), parse(Int, args[4]))
+        elseif !isempty(args) && !startswith(args[1], "-")
+            load_fixture(args[1])
         else
-            error("unknown arg: $a")
+            error("usage: tsvdm.jl <fixture.bin|--gen M P N> [--reps N] [--dump out.bin]")
         end
-    end
-    return (fixture, gen, reps, dump)
-end
 
-function main(args::Vector{String})
-    fixture, gen, reps, dump = parse_args(args)
-    A, M, (m, p, n) = if fixture !== nothing
-        load_fixture(fixture)
-    elseif gen !== nothing
-        generate(gen...)
-    else
-        error("usage: tsvdm.jl <fixture.bin> [--reps N] [--dump out.bin]\n" *
-              "       tsvdm.jl --gen M P N [--reps N] [--dump out.bin]")
-    end
-
-    # Warmup — covers Julia's first-run JIT compile cost (not timed).
-    tsvdm(A, M)
+    tsvdm(A, M)                               # warmup — pays Julia's first-call JIT cost
 
     times = Float64[]
     for _ in 1:reps
@@ -156,9 +116,9 @@ function main(args::Vector{String})
 
     if dump !== nothing
         # Match C++ dump format: column-major (m, p, n).
-        A_dump = permutedims(A_approx, (2, 3, 1))     # (n,m,p) -> (m,p,n)
+        A_dump = permutedims(A_approx, (2, 3, 1))
         open(dump, "w") do f
-            write(f, A_dump)                           # Julia writes column-major
+            write(f, A_dump)
         end
     end
 

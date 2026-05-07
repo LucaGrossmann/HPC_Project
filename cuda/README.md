@@ -8,12 +8,16 @@ through `cupy.get_array_module`.
 
 | File | Role |
 |---|---|
-| `tsvdm_ops.py` | Building-block ops (mode-3 product, facewise, ⋆M, etc.) |
-| `tsvdm_core.py` | `tsvdm`, `reconstruct` |
-| `tsvdm_utils.py` | `random_orthogonal`, `relative_error`, `compression_ratio` |
-| `run_cupy.py` | Part 4 GPU driver (CuPy); `--gen M P N` or fixture path |
-| `gen_fixture.py` | Generate `(A, M)` `.bin` fixtures for the C++ baselines |
-| `tests/` | pytest suite (reconstruction, orthogonality, oracle cross-check) |
+| `tsvdm_ops.py` | Building-block ops (`mode3_product`, `facewise_product`, ⋆M product, ⋆M transpose). NumPy/CuPy-agnostic via `cupy.get_array_module`. |
+| `tsvdm_core.py` | `tsvdm` (the algorithm) and `reconstruct` (rebuild `A_approx` from `U`, `S`, `V`, `M`). The reference oracle for every other backend. |
+| `tsvdm_utils.py` | Helpers: `random_orthogonal`, `relative_error`, `compression_ratio`, `_validate_inputs`. |
+| `run_cupy.py` | Part 4 GPU driver. `--gen M P N` to time a freshly seeded tensor on GPU; fixture path to validate against a committed `.bin`. |
+| `gen_fixture.py` | Writes the `(A, M)` `.bin` fixtures used by `serial/`, `openmp/`, `mpi/`. Invoked by `serial/gen_fixtures.slurm`. |
+| `compare_cpp_python.py` | Element-wise C++-vs-Python validator: runs a C++ binary with `--dump`, loads the result, compares against `tsvdm_core.tsvdm`. |
+| `submit.slurm` | Part 4 GPU job. Self-creates `cuda/.venv/`, pip-installs CuPy 13.6.0 on first run, then runs the size sweep + fixture cross-check. |
+| `requirements.txt` | Python deps for the CPU/Part 0 path: `numpy`, `pytest`, `mprod-package` (the oracle). |
+| `__init__.py` | Re-exports `tsvdm`, `reconstruct`, `random_orthogonal`, `relative_error` so `from cuda import tsvdm` works. |
+| `tests/` | pytest suite: reconstruction error, U/V orthogonality, edge cases, and `test_oracle.py` (cross-check vs. `mprod_package`). |
 
 Tensor shape convention: `A` has shape `(n, m, p)`. Frontal
 slice *i* is `A[i]`.

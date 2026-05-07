@@ -1,6 +1,5 @@
-#!/bin/bash
-# Part 5 — Julia. Single-node CPU job. Julia is provisioned in the CS-2050
-# Spack env (cluster-environment.md §1.4).
+#!/usr/bin/env bash
+# Part 5 — Julia. Single-node CPU job, BLAS pinned to 1 thread.
 
 #SBATCH --job-name=tsvdm_julia
 #SBATCH --nodes=1
@@ -11,20 +10,25 @@
 
 set -euo pipefail
 
+# Activate the course Spack env (top-level CLAUDE.md "Cluster Setup").
 . ~/161588/spack/share/spack/setup-env.sh
 spack env activate -p CS-2050
 
-cd "$(dirname "$0")"
-mkdir -p results
+# Pin BLAS to 1 thread — match the other CPU baselines.
+export OPENBLAS_NUM_THREADS=1
 
 # Print Julia version for reproducibility.
 julia --version
+echo "host=$(hostname)"
 echo
 
-# 3 sizes × 3 reps per plan.md §4 Part 5 (10-min cap with JIT-warmup budget).
+# Size sweep (plan.md §4 Part 5).
+echo "=== size sweep ==="
 for size in "64 64 64" "256 256 256" "512 512 256"; do
     julia tsvdm.jl --gen $size --reps 3
 done
+echo
 
-# Cross-check vs. the committed serial fixture (sanity).
+# Cross-check against the committed serial fixture.
+echo "=== cross-check vs. serial fixture ==="
 julia tsvdm.jl ../serial/fixtures/medium.bin --reps 1

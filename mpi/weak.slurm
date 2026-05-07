@@ -1,7 +1,7 @@
 #!/bin/bash
-# Part 3 — MPI. Strong-scaling sweep across nodes, BLAS pinned to 1 thread.
-
-#SBATCH --job-name=tsvdm_mpi
+# MPI weak scaling: n_base × P slices at P ranks (one rank per node).
+#
+#SBATCH --job-name=tsvdm_mpi_weak
 #SBATCH --nodes=8
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=1
@@ -9,19 +9,16 @@
 #SBATCH --output=results/%x-%j.out
 
 set -euo pipefail
-
 . ~/161588/spack/share/spack/setup-env.sh
 spack env activate -p CS-2050
 
 export OPENBLAS_NUM_THREADS=1
 
-FIXTURE="${1:-../serial/fixtures/medium.bin}"
-
-echo "fixture=$FIXTURE  host=$(hostname)"
-echo
-
 make clean && make -s
 
+# Ranks P   →   fixture with n = 32 · P
+declare -A FIX=( [1]=32 [2]=64 [4]=128 [8]=256 )
+
 for P in 1 2 4 8; do
-    srun -N $P -n $P ./tsvdm_mpi "$FIXTURE"
+    srun -N $P -n $P ./tsvdm_mpi ../serial/fixtures/weak_n${FIX[$P]}.bin
 done

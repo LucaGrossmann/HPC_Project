@@ -6,11 +6,22 @@ __pycache__/
 *.pyc
 *.pyo
 
+# pytest
+.pytest_cache/
+
+# Working notes / planning / reference material — not part of the submission
+docs/
+
 # Compiled C++ binaries
 serial/tsvdm_serial
 openmp/tsvdm_openmp
 mpi/tsvdm_mpi
 cuda_cpp/tsvdm_cuda
+
+# Large regenerable fixtures (rebuild via serial/gen_fixtures.slurm).
+# Keep small.bin tracked so tests/CI have a fast smoke fixture.
+serial/fixtures/*.bin
+!serial/fixtures/small.bin
 
 # LaTeX auxiliary files
 *.aux
@@ -20,6 +31,8 @@ cuda_cpp/tsvdm_cuda
 *.out
 *.toc
 *.synctex.gz
+*.fdb_latexmk
+*.fls
 
 # Profiler outputs (large, opaque, regenerable)
 **/results/vtune_*/

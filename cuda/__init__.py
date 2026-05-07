@@ -1,11 +1,10 @@
-"""Part 0 — Python reference implementation of t-SVDM and t-SVDMII.
+"""Part 0 — Python reference implementation of t-SVDM.
 
 This package is the correctness oracle for all other implementations
-(Parts 1-5: serial C++, OpenMP, MPI, CuPy, Julia). See
-docs/implementation-notes/00-python-reference.md for design decisions.
+(Parts 1-5: serial C++, OpenMP, MPI, CuPy, Julia).
 """
 
-from .tsvdm_core import tsvdm, tsvdmii, reconstruct
+from .tsvdm_core import tsvdm, reconstruct
 from .tsvdm_ops import (
     mode3_product,
     facewise_product,
@@ -17,7 +16,6 @@ from .tsvdm_utils import relative_error, compression_ratio, random_orthogonal
 
 __all__ = [
     "tsvdm",
-    "tsvdmii",
     "reconstruct",
     "mode3_product",
     "facewise_product",

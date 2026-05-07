@@ -280,13 +280,11 @@ static double relativeError(const double* A, const double* Aapprox, size_t n) {
 
 // -----------------------------------------------------------------------------
 int main(int argc, char** argv) {
+    const int reps = 30;
     const char* fixturePath = nullptr;
     const char* dumpPath    = nullptr;
-    int reps = 1;
     for (int i = 1; i < argc; ++i) {
-        if (std::strcmp(argv[i], "--reps") == 0 && i + 1 < argc) {
-            reps = std::atoi(argv[++i]);
-        } else if (std::strcmp(argv[i], "--dump") == 0 && i + 1 < argc) {
+        if (std::strcmp(argv[i], "--dump") == 0 && i + 1 < argc) {
             dumpPath = argv[++i];
         } else if (argv[i][0] != '-') {
             fixturePath = argv[i];
@@ -295,9 +293,8 @@ int main(int argc, char** argv) {
             return 2;
         }
     }
-    if (!fixturePath || reps < 1) {
-        std::fprintf(stderr,
-                     "usage: %s <fixture.bin> [--reps N] [--dump out.bin]\n",
+    if (!fixturePath) {
+        std::fprintf(stderr, "usage: %s <fixture.bin> [--dump out.bin]\n",
                      argv[0]);
         return 2;
     }
