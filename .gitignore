@@ -1,0 +1,34 @@
+# Python venvs (per-impl, course-managed Spack env doesn't ship CuPy)
+**/.venv/
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# Compiled C++ binaries
+serial/tsvdm_serial
+openmp/tsvdm_openmp
+mpi/tsvdm_mpi
+cuda_cpp/tsvdm_cuda
+
+# LaTeX auxiliary files
+*.aux
+*.log
+*.bbl
+*.blg
+*.out
+*.toc
+*.synctex.gz
+
+# Profiler outputs (large, opaque, regenerable)
+**/results/vtune_*/
+**/results/*.nsys-rep
+**/results/*.sqlite
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
