@@ -1,4 +1,4 @@
-# Parallel t-SVDM — CS 2050 Final Project
+# Parallel t-SVDM: serial C++/LAPACK, OpenMP, MPI, CuPy (GPU), and Julia
 
 Five implementations of the full t-SVDM (tensor SVD with M-product;
 Kilmer, Horesh, Avron & Newman, *PNAS* 2021) benchmarked across CPU,
@@ -8,6 +8,30 @@ is `n` independent matrix SVDs (embarrassingly parallel at the slice
 level), and the surrounding mode-3 transforms reduce to single dense
 matrix-matrix products. See `report/report.pdf` for the full
 discussion.
+
+## Results
+
+Wall-clock on the `large` 512×512×256 fixture (`median_ms` from
+`report/results.csv`). The serial C++/LAPACK backend was not run at
+this size, so the single-thread OpenMP run is the baseline; every
+speedup is relative to it.
+
+| Backend | Workers | Time | Speedup vs baseline |
+|---|---|---|---|
+| Serial C++ / LAPACK | 1 (openmp, 1 thread) | 26.3 s | 1.0× |
+| OpenMP | 16 threads | 3.66 s | 7.2× |
+| MPI | 8 ranks | 10.3 s | 2.6× |
+| CuPy (single GPU) | 1 | 22.3 s | 1.2× |
+| Julia (stdlib) | 1 | 30.9 s | 0.85× |
+
+All backends reconstruct the input to ~1e-15 relative Frobenius error
+and are cross-validated against the Python reference in
+`cuda/tsvdm_core.py`, itself oracle-tested against the `mprod` package.
+Weak-scaling curves and VTune hotspot analysis are in
+`report/report.pdf`.
+
+![Strong scaling](report/figures/strong_scaling.png)
+![Weak scaling](report/figures/weak_scaling.png)
 
 ## Directory tour
 
@@ -67,12 +91,12 @@ Output lands in each impl's `results/*.out`. After all jobs finish:
 # 6. Pull results back (laptop side).
 [local]$ rsync -avz --include='*/' --include='*.out' --include='*.csv' \
                     --include='*.txt' --exclude='*' \
-              cluster:~/HPC_Project/  ~/Desktop/Y1S2/HPC_Project/
+              cluster:~/HPC_Project/  ./HPC_Project/
 
 # 7. Parse + plot locally.
-[local]$ conda run -n claude python report/parse_results.py
-[local]$ conda run -n claude python report/plot_scaling.py
-[local]$ conda run -n claude python report/plot_vtune.py    # after VTune lands
+[local]$ python report/parse_results.py
+[local]$ python report/plot_scaling.py
+[local]$ python report/plot_vtune.py    # after VTune lands
 
 # 8. Compile the report.
 [local]$ cd report
@@ -128,3 +152,8 @@ on disk and `cuda/run_cupy.py` reshapes on load.
 - `report/report.pdf` — the deliverable report.
 - Per-impl `README.md` files (`serial/`, `openmp/`, `mpi/`, `cuda/`,
   `additional/`) — build/run instructions for each backend.
+
+## Context
+
+Final project for CS 2050 (High-Performance Computing for Science and
+Engineering), Harvard, Spring 2026.
